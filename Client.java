@@ -1,68 +1,56 @@
 import java.io.*;
 import java.net.*;
-import java.util.*;
 
-public class Server{
-    private static final int PORT = 1234;
-    private static Set<ClientHandler> clientHandlers = new HashSet<>();
+public class Client {
+    private static final String SERVER_IP = "localhost";
+    private static final int SERVER_PORT = 1234;
 
     public static void main(String[] args) throws IOException {
-        ServerSocket serverSocket = new ServerSocket(PORT);
-        System.out.println("Server started on port " + PORT);
+        Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+        System.out.println("Connected to the chat server");
 
-        while (true) {
-            Socket clientSocket = serverSocket.accept();
-            System.out.println("New client connected: " + clientSocket);
-            ClientHandler handler = new ClientHandler(clientSocket);
-            clientHandlers.add(handler);
-            new Thread(handler).start();
-        }
+        new Thread(new ReadHandler(socket)).start();
+        new Thread(new WriteHandler(socket)).start();
     }
 
-    public static void broadcast(String message, ClientHandler sender) {
-        for (ClientHandler client : clientHandlers) {
-            if (client != sender) {
-                client.sendMessage(message);
+    static class ReadHandler implements Runnable {
+        private BufferedReader in;
+
+        public ReadHandler(Socket socket) throws IOException {
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        }
+
+        public void run() {
+            try {
+                String response;
+                while ((response = in.readLine()) != null) {
+                    System.out.println(response);
+                }
+            } catch (IOException e) {
+                System.out.println("Disconnected from server.");
             }
         }
     }
 
-    public static void removeClient(ClientHandler handler) {
-        clientHandlers.remove(handler);
-    }
-
-    static class ClientHandler implements Runnable {
-        private Socket socket;
+    static class WriteHandler implements Runnable {
         private PrintWriter out;
-        private BufferedReader in;
+        private BufferedReader console;
 
-        public ClientHandler(Socket socket) throws IOException {
-            this.socket = socket;
-            this.out = new PrintWriter(socket.getOutputStream(), true);
-            this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        }
-
-        public void sendMessage(String message) {
-            out.println(message);
+        public WriteHandler(Socket socket) throws IOException {
+            out = new PrintWriter(socket.getOutputStream(), true);
+            console = new BufferedReader(new InputStreamReader(System.in));
         }
 
         public void run() {
             try {
                 String message;
-                while ((message = in.readLine()) != null) {
-                    System.out.println("Received: " + message);
-                    Server.broadcast(message, this);
+                while ((message = console.readLine()) != null) {
+                    out.println(message);
                 }
             } catch (IOException e) {
-                System.out.println("Client disconnected.");
-            } finally {
-                try {
-                    socket.close();
-                    Server.removeClient(this);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                System.out.println("Error sending message.");
             }
         }
     }
 }
+
